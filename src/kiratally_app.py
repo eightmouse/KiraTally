@@ -10,11 +10,54 @@ from tkinter import messagebox
 
 from PIL import Image, ImageTk
 
-try:
-    import pygame
-except Exception:
-    pygame = None
+XINPUT_BUTTON_A = 0x1000
+XINPUT_BUTTON_B = 0x2000
+XINPUT_BUTTON_X = 0x4000
+XINPUT_BUTTON_Y = 0x8000
+XINPUT_BUTTON_LB = 0x0100
+XINPUT_BUTTON_RB = 0x0200
+XINPUT_BUTTON_BACK = 0x0020
+XINPUT_BUTTON_START = 0x0010
+XINPUT_BUTTON_L3 = 0x0040
+XINPUT_BUTTON_R3 = 0x0080
+XINPUT_BUTTON_DPAD_UP = 0x0001
+XINPUT_BUTTON_DPAD_DOWN = 0x0002
+XINPUT_BUTTON_DPAD_LEFT = 0x0004
+XINPUT_BUTTON_DPAD_RIGHT = 0x0008
 
+
+class XINPUT_GAMEPAD(ctypes.Structure):
+    _fields_ = [
+        ("wButtons", ctypes.c_ushort),
+        ("bLeftTrigger", ctypes.c_ubyte),
+        ("bRightTrigger", ctypes.c_ubyte),
+        ("sThumbLX", ctypes.c_short),
+        ("sThumbLY", ctypes.c_short),
+        ("sThumbRX", ctypes.c_short),
+        ("sThumbRY", ctypes.c_short),
+    ]
+
+
+class XINPUT_STATE(ctypes.Structure):
+    _fields_ = [("dwPacketNumber", ctypes.c_uint), ("Gamepad", XINPUT_GAMEPAD)]
+
+
+def _load_xinput_get_state():
+    if os.name != "nt":
+        return None
+    for dll_name in ("xinput1_4.dll", "xinput1_3.dll", "xinput9_1_0.dll"):
+        try:
+            lib = ctypes.WinDLL(dll_name)
+            fn = lib.XInputGetState
+            fn.argtypes = [ctypes.c_uint, ctypes.POINTER(XINPUT_STATE)]
+            fn.restype = ctypes.c_uint
+            return fn
+        except Exception:
+            continue
+    return None
+
+
+XINPUT_GET_STATE = _load_xinput_get_state()
 
 APP_NAME = "KiraTally"
 UI_BG = "#11131a"
@@ -112,7 +155,7 @@ class KiraTallyApp:
         self.counter = 0
         self.sprite_path = ""
         self.current_dex = 1
-        self.reset_input_text = "ctrl+r"
+        self.reset_input_text = ""
 
         self._photo = None
         self._app_icon_photo = None
@@ -123,13 +166,11 @@ class KiraTallyApp:
         self.suggestion_names = []
         self.suggestions_visible = False
 
-        self.binding = {"type": "keyboard", "groups": [[0x11], [ord("R")]]}
+        self.binding = None
 
         self.listener_running = False
         self.listener_thread = None
 
-        self.controller_ready = False
-        self.controllers = {}
 
         self._ensure_dirs()
         self._load_name_index()
@@ -230,18 +271,56 @@ class KiraTallyApp:
         )
         self.reset_input_entry.pack(fill="x", padx=8, pady=(0, 6), ipady=5)
         self.reset_input_entry.bind("<Return>", self._apply_reset_binding_ui)
-        self.reset_input_entry.bind("<FocusOut>", self._apply_reset_binding_ui)
 
         tk.Label(
             input_box,
-            text="Examples: ctrl+r   pad:a   pad:button0   pad:dpad_up",
+            text="Examples: ctrl+r   r   pad:rb   pad:button0",
             fg="#90a5d6",
             bg=UI_PANEL_BG,
             font=("Segoe UI", 8),
         ).pack(anchor="w", padx=8, pady=(0, 8))
 
+        self._setup_reset_input_placeholder()
+
         self.root.protocol("WM_DELETE_WINDOW", self.on_close)
 
+    def _setup_reset_input_placeholder(self):
+        self._reset_placeholder = "Input hotkey and press Enter..."
+        self._reset_placeholder_active = False
+        self.reset_input_entry.bind("<FocusIn>", self._on_reset_input_focus_in)
+        self.reset_input_entry.bind("<FocusOut>", self._on_reset_input_focus_out)
+        if not self.reset_input_var.get().strip():
+            self._show_reset_input_placeholder()
+
+    def _show_reset_input_placeholder(self):
+        self._reset_placeholder_active = True
+        self.reset_input_var.set(self._reset_placeholder)
+        self.reset_input_entry.configure(fg="#8fa1d1")
+
+    def _hide_reset_input_placeholder(self):
+        if self._reset_placeholder_active:
+            self._reset_placeholder_active = False
+            self.reset_input_var.set("")
+            self.reset_input_entry.configure(fg="#f4f6ff")
+
+    def _on_reset_input_focus_in(self, _event=None):
+        self._hide_reset_input_placeholder()
+        return None
+
+    def _on_reset_input_focus_out(self, _event=None):
+        if not self.reset_input_var.get().strip():
+            self._show_reset_input_placeholder()
+        return None
+
+    def _get_reset_input_raw(self):
+        if not hasattr(self, "reset_input_var"):
+            return self.reset_input_text.strip()
+        if getattr(self, "_reset_placeholder_active", False):
+            return ""
+        raw = self.reset_input_var.get().strip()
+        if raw == getattr(self, "_reset_placeholder", ""):
+            return ""
+        return raw
     def _update_title(self):
         self.root.title(APP_NAME)
 
@@ -336,7 +415,7 @@ class KiraTallyApp:
         self.counter = int(data.get("count", 0))
         self.sprite_path = str(data.get("sprite_path", ""))
         self.current_dex = int(data.get("dex", 1))
-        self.reset_input_text = str(data.get("hotkey", "ctrl+r"))
+        self.reset_input_text = str(data.get("hotkey", ""))
 
         if self.current_dex < 1 or self.current_dex > GEN3_MAX_DEX:
             self.current_dex = 1
@@ -346,7 +425,7 @@ class KiraTallyApp:
             "count": self.counter,
             "sprite_path": self.sprite_path,
             "dex": self.current_dex,
-            "hotkey": self.reset_input_var.get().strip() if hasattr(self, "reset_input_var") else self.reset_input_text,
+            "hotkey": self._get_reset_input_raw(),
         }
         with open(DATA_FILE, "w", encoding="utf-8") as f:
             json.dump(data, f, indent=2)
@@ -533,8 +612,8 @@ class KiraTallyApp:
 
     def _parse_keyboard_binding(self, text):
         tokens = [part.strip().lower() for part in text.split("+") if part.strip()]
-        if len(tokens) < 2:
-            raise ValueError("Keyboard binding must be like ctrl+r")
+        if len(tokens) < 1:
+            raise ValueError("Keyboard binding cannot be empty")
 
         groups = []
         for token in tokens:
@@ -547,80 +626,101 @@ class KiraTallyApp:
     @staticmethod
     def _controller_button_alias(token):
         alias = {
-            "a": 0,
-            "cross": 0,
-            "south": 0,
-            "b": 1,
-            "circle": 1,
-            "east": 1,
-            "x": 2,
-            "square": 2,
-            "west": 2,
-            "y": 3,
-            "triangle": 3,
-            "north": 3,
-            "lb": 4,
-            "l1": 4,
-            "rb": 5,
-            "r1": 5,
-            "back": 6,
-            "select": 6,
-            "share": 6,
-            "minus": 6,
-            "start": 7,
-            "options": 7,
-            "plus": 7,
-            "l3": 8,
-            "r3": 9,
+            "a": XINPUT_BUTTON_A,
+            "cross": XINPUT_BUTTON_A,
+            "south": XINPUT_BUTTON_A,
+            "b": XINPUT_BUTTON_B,
+            "circle": XINPUT_BUTTON_B,
+            "east": XINPUT_BUTTON_B,
+            "x": XINPUT_BUTTON_X,
+            "square": XINPUT_BUTTON_X,
+            "west": XINPUT_BUTTON_X,
+            "y": XINPUT_BUTTON_Y,
+            "triangle": XINPUT_BUTTON_Y,
+            "north": XINPUT_BUTTON_Y,
+            "lb": XINPUT_BUTTON_LB,
+            "l1": XINPUT_BUTTON_LB,
+            "rb": XINPUT_BUTTON_RB,
+            "r1": XINPUT_BUTTON_RB,
+            "back": XINPUT_BUTTON_BACK,
+            "select": XINPUT_BUTTON_BACK,
+            "share": XINPUT_BUTTON_BACK,
+            "minus": XINPUT_BUTTON_BACK,
+            "start": XINPUT_BUTTON_START,
+            "options": XINPUT_BUTTON_START,
+            "plus": XINPUT_BUTTON_START,
+            "l3": XINPUT_BUTTON_L3,
+            "r3": XINPUT_BUTTON_R3,
         }
         return alias.get(token)
 
     def _parse_controller_binding(self, text):
         payload = text[4:].strip().lower()
         if not payload:
-            raise ValueError("Controller binding format: pad:a or pad:button0")
+            raise ValueError("Controller binding format: pad:a or pad:rb")
 
         parts = [p.strip() for p in payload.split("+") if p.strip()]
-        reqs = []
+        masks = []
         dpad_map = {
-            "dpad_up": (0, 1),
-            "dpad_down": (0, -1),
-            "dpad_left": (-1, 0),
-            "dpad_right": (1, 0),
+            "dpad_up": XINPUT_BUTTON_DPAD_UP,
+            "dpad_down": XINPUT_BUTTON_DPAD_DOWN,
+            "dpad_left": XINPUT_BUTTON_DPAD_LEFT,
+            "dpad_right": XINPUT_BUTTON_DPAD_RIGHT,
         }
+        button_index_map = [
+            XINPUT_BUTTON_A,
+            XINPUT_BUTTON_B,
+            XINPUT_BUTTON_X,
+            XINPUT_BUTTON_Y,
+            XINPUT_BUTTON_LB,
+            XINPUT_BUTTON_RB,
+            XINPUT_BUTTON_BACK,
+            XINPUT_BUTTON_START,
+            XINPUT_BUTTON_L3,
+            XINPUT_BUTTON_R3,
+        ]
 
         for part in parts:
             if part in dpad_map:
-                reqs.append({"type": "hat", "value": dpad_map[part]})
-                continue
-            if part.startswith("button") and part[6:].isdigit():
-                reqs.append({"type": "button", "index": int(part[6:])})
+                masks.append(dpad_map[part])
                 continue
 
-            idx = self._controller_button_alias(part)
-            if idx is not None:
-                reqs.append({"type": "button", "index": idx})
+            if part.startswith("button") and part[6:].isdigit():
+                idx = int(part[6:])
+                if idx < 0 or idx >= len(button_index_map):
+                    raise ValueError(f"Unsupported controller token: {part}")
+                masks.append(button_index_map[idx])
+                continue
+
+            mask = self._controller_button_alias(part)
+            if mask is not None:
+                masks.append(mask)
                 continue
 
             raise ValueError(f"Unsupported controller token: {part}")
 
-        if not reqs:
+        if not masks:
             raise ValueError("Controller binding is empty")
 
-        return {"type": "controller", "requirements": reqs}
+        return {"type": "controller", "button_masks": masks}
 
     def _apply_reset_binding(self, show_error=True):
-        raw = self.reset_input_var.get().strip() if hasattr(self, "reset_input_var") else self.reset_input_text
+        raw = self._get_reset_input_raw()
         if not raw:
-            if show_error:
-                messagebox.showerror("Reset Input", "Reset input cannot be empty.")
-            return False
+            self.binding = None
+            self.reset_input_text = ""
+            self._save_data()
+            self._update_title()
+            return True
 
         try:
-            if raw.lower().startswith("pad:"):
+            lowered = raw.lower()
+            if lowered.startswith("pad:"):
+                raw = lowered
                 parsed = self._parse_controller_binding(raw)
-                if pygame is None:
-                    raise ValueError("Controller input requires pygame. Install with: pip install pygame")
+            elif self._controller_button_alias(lowered) is not None or lowered.startswith("button") or lowered.startswith("dpad_"):
+                raw = f"pad:{lowered}"
+                parsed = self._parse_controller_binding(raw)
             else:
                 parsed = self._parse_keyboard_binding(raw)
         except ValueError as exc:
@@ -635,8 +735,14 @@ class KiraTallyApp:
         return True
 
     def _apply_reset_binding_ui(self, _event=None):
-        if not self._apply_reset_binding(show_error=True):
+        ok = self._apply_reset_binding(show_error=True)
+        if not ok:
             self.reset_input_var.set(self.reset_input_text)
+        if not self.reset_input_text:
+            self._show_reset_input_placeholder()
+        else:
+            self._reset_placeholder_active = False
+            self.reset_input_entry.configure(fg="#f4f6ff")
         return None
 
     @staticmethod
@@ -653,67 +759,37 @@ class KiraTallyApp:
                 return False
         return True
 
-    def _ensure_controller_runtime(self):
-        if pygame is None:
-            return False
-        if not self.controller_ready:
-            pygame.init()
-            pygame.joystick.init()
-            self.controller_ready = True
-        return True
+    def _get_connected_controller_buttons(self):
+        if XINPUT_GET_STATE is None:
+            return []
 
-    def _refresh_controllers(self):
-        pygame.event.pump()
-        count = pygame.joystick.get_count()
-
-        for idx in range(count):
-            if idx not in self.controllers:
-                js = pygame.joystick.Joystick(idx)
-                js.init()
-                self.controllers[idx] = js
-
-        for idx in list(self.controllers.keys()):
-            if idx >= count:
-                try:
-                    self.controllers[idx].quit()
-                except Exception:
-                    pass
-                del self.controllers[idx]
-
-    @staticmethod
-    def _joystick_matches(joy, requirements):
-        for req in requirements:
-            if req["type"] == "button":
-                idx = req["index"]
-                if idx >= joy.get_numbuttons() or joy.get_button(idx) != 1:
-                    return False
-            elif req["type"] == "hat":
-                wanted = req["value"]
-                matched = False
-                for i in range(joy.get_numhats()):
-                    if joy.get_hat(i) == wanted:
-                        matched = True
-                        break
-                if not matched:
-                    return False
-            else:
-                return False
-        return True
+        states = []
+        for user_idx in range(4):
+            state = XINPUT_STATE()
+            result = XINPUT_GET_STATE(user_idx, ctypes.byref(state))
+            if result == 0:
+                states.append(state.Gamepad.wButtons)
+        return states
 
     def _is_controller_binding_active(self, binding):
-        if not self._ensure_controller_runtime():
-            return False
-        self._refresh_controllers()
-        if not self.controllers:
+        states = self._get_connected_controller_buttons()
+        if not states:
             return False
 
-        reqs = binding["requirements"]
-        for joy in self.controllers.values():
-            if self._joystick_matches(joy, reqs):
+        masks = binding["button_masks"]
+        for button_bits in states:
+            matched = True
+            for mask in masks:
+                if (button_bits & mask) != mask:
+                    matched = False
+                    break
+            if matched:
                 return True
         return False
 
     def _is_binding_active(self):
+        if not self.binding:
+            return False
         if self.binding["type"] == "keyboard":
             return self._is_keyboard_binding_active(self.binding)
         if self.binding["type"] == "controller":
@@ -740,15 +816,6 @@ class KiraTallyApp:
 
     def _stop_listener(self):
         self.listener_running = False
-        if self.controller_ready and pygame is not None:
-            try:
-                for js in self.controllers.values():
-                    js.quit()
-                self.controllers.clear()
-                pygame.joystick.quit()
-                pygame.quit()
-            except Exception:
-                pass
 
     def _increment_from_binding(self):
         self.counter += 1
@@ -769,6 +836,18 @@ def main():
 
 if __name__ == "__main__":
     main()
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 

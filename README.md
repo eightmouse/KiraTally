@@ -29,15 +29,10 @@ Minimal shiny hunting reset counter (Gen 3).
 
 ## Reset Input
 
-Keyboard examples:
-- `ctrl+r`
-- `ctrl+shift+r`
-
-Controller examples (Xbox/Sony/Switch via SDL/pygame):
-- `pad:a`
-- `pad:button0`
-- `pad:dpad_up`
-- `pad:lb+rb`
+- Field starts empty and shows placeholder: `Input hotkey and press Enter...`
+- Single-key keyboard inputs work (examples: `space`, `z`, `r`).
+- Combo keyboard inputs work (examples: `ctrl+r`, `ctrl+shift+r`).
+- Controller input works on Windows via built-in XInput (examples: `pad:rb`, `pad:a`, `pad:dpad_up`, `pad:lb+rb`).
 
 Supported controller tokens:
 - face: `a`, `b`, `x`, `y`, `cross`, `circle`, `square`, `triangle`
@@ -45,7 +40,7 @@ Supported controller tokens:
 - system: `start`, `back`, `select`, `options`, `share`, `plus`, `minus`
 - sticks: `l3`, `r3`
 - dpad: `dpad_up`, `dpad_down`, `dpad_left`, `dpad_right`
-- raw: `button0`, `button1`, ...
+- raw: `button0` ... `button9`
 
 ## Build EXE (Windows)
 
