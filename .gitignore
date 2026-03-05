@@ -1,0 +1,5 @@
+__pycache__/
+*.pyc
+kira_data.json
+build/
+dist/
