@@ -1,14 +1,13 @@
 ﻿![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)
 ![Python](https://img.shields.io/badge/python-3.8+-blue.svg)
-![Target](https://img.shields.io/badge/Target-GBA-orange)
-![Stage](https://img.shields.io/badge/Stage-Archived-brown.svg)
-![Support](https://img.shields.io/badge/Support-None-lightgrey.svg)
-![Platform](https://img.shields.io/badge/platform-Windows%20%7C%20Linux%20%7C%20macOS-lightgrey)
 [![Support me on Ko-fi](https://img.shields.io/badge/Support%20Me-Ko--fi-F16061?logo=ko-fi&logoColor=white)](https://ko-fi.com/eightmouse)
 
 # KiraTally
+A Global, Hotkey-Driven Shiny Counter for Pokémon (3rd Gen). 
+KiraTally is a lightweight, background-running counter designed to track shiny hunting resets across any platform, be it Emulator (PC) or Console. 
+It eliminates the "false positives" of visual-based counters.
 
-Minimal shiny hunting reset counter (Gen 3).
+<img width="422" height="592" alt="Screenshot 2026-03-05 200722" src="https://github.com/user-attachments/assets/c4cfb37b-47d6-4ffb-a732-b29d01b739fa" />
 
 ## Project structure
 
