@@ -4,7 +4,7 @@
 
 # KiraTally
 A Global, Hotkey-Driven Shiny Counter for Pokémon (3rd Gen). 
-KiraTally is a lightweight, background-running counter designed to track shiny hunting resets across any platform, be it Emulator (PC) or Console. 
+KiraTally is a lightweight, background-running counter designed to track shiny hunting resets. 
 It eliminates the "false positives" of visual-based counters.
 
 <img width="422" height="592" alt="Screenshot 2026-03-05 200722" src="https://github.com/user-attachments/assets/c4cfb37b-47d6-4ffb-a732-b29d01b739fa" />
